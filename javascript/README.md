@@ -42,4 +42,15 @@ There are several important considerations regarding supporting the TRX format w
  - The TRX [specification](https://github.com/frheault/tractography_file_format/blob/master/trx_file_memmap/specifications.md) allows uint64 and int64 arrays and demands that offsets are always uint64. However, JavaScript does not natively support these datatypes. This code converts these values to UNSIGNED uint32 and generates an alert if any value is outside this range. Alternative implementations could support these as float64 (with a [flintmax](https://www.mathworks.com/help/matlab/ref/flintmax.html) of 2^53) or as the new [BigInt](https://www.smashingmagazine.com/2019/07/essential-guide-javascript-newest-data-type-bigint/) type.
  - The TRX format allows arrays to use the float16 datatype, which is not native to JavaScript. This code converts these to float32.
  - Be aware that the specification stores NB_STREAMLINES values in the offsets array, with each value pointing to the start of that streamline One must use the length of the positions array or the header to infer the end of the final streamline. This code will populate return an offset array with NB_STREAMLINES+1 values to solve the [fencepost problem](https://icarus.cs.weber.edu/~dab/cs1410/textbook/3.Control/fencepost.html) for the final streamline. This simplifies and accelerates display code, but one must be aware of this modification.
+ - The TRX specification requires little-endian order. The current code only supports little endian systems. This should support all modern Android, iOS, macOS, Linux and Windows devices.
 
+## Benchmark
+
+The included JavaScript `trx_bench` provides a method to evaluate performance. This benchmark is likely specific to JavaScript and so caution should be excercised in evaluating relative performance. The script will report the time to load a TRK, TCK, VTK or TRX file 10 times (it loads the tracts 11 times, and ignores the first run).
+
+The graph below shows the time load the [inferior fronto-occipital fasciculus (IFOF) ](https://brain.labsolver.org/hcp_trk_atlas.html) with 30856 streamlines and 11437105 vertices. The files were converted to each format using the default settings of `tff_convert_tractogram.py`. The benchmark was run on a passively-cooled 15w M1-based MacBook Air. The uncompressed TCK and TRK files provide very similar results, and so overlap on the figure. 
+
+ - The VTK format used 64-bit precision for both offsets and vertices, leading to a large file size.
+ - The TRX format requires 64-bit offsets and the implementation uses 16-bit floats for the vertex positions. Since neither is native to JavaScript, the `trx32` file was also evaluated, which uses the native 32-bit types for both properties (note that the use of 32-bit offsets is not allowed by the specification).
+
+![M1 Performance](M1.png)
