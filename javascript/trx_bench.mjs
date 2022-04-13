@@ -1,5 +1,4 @@
 //Install dependencies
-// npm install jszip
 // npm install gl-matrix
 // npm install fflate
 // npm install fzstd
@@ -7,7 +6,6 @@
 // node trx_bench.mjs dpv.trx
 
 import { mat3, mat4, vec3, vec4 } from "gl-matrix"; //for trk
-import JSZip from "jszip";
 import * as fs from "fs";
 import * as fflate from "fflate";
 import * as fzstd from 'fzstd'; //https://github.com/101arrowz/fzstd
