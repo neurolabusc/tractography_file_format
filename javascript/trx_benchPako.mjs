@@ -1,16 +1,14 @@
 //Install dependencies
 // npm install jszip
 // npm install gl-matrix
-// npm install fflate
-// npm install fzstd
+// npm install pako
 //Test on tractogram
-// node trx_bench.mjs dpv.trx
+// node trx_benchPako.mjs dpv.trx
 
+import * as pako from "pako"; //for .trk.gz
 import { mat3, mat4, vec3, vec4 } from "gl-matrix"; //for trk
 import JSZip from "jszip";
 import * as fs from "fs";
-import * as fflate from "fflate";
-import * as fzstd from 'fzstd'; //https://github.com/101arrowz/fzstd
 
 function alert(str) { //for node.js which does not have a GUI alert
   console.log(str);
@@ -26,12 +24,13 @@ function readTRK(buffer) {
   var magic = reader.getUint32(0, true); //'TRAC'
   if (magic !== 1128354388) {
     //e.g. TRK.gz
-    let raw;
-    if (magic === 4247762216) { //zstd 
-      raw = fzstd.decompress(new Uint8Array(buffer));
-      raw = new Uint8Array(raw);
-    } else
-      raw = fflate.decompressSync(new Uint8Array(buffer));
+    var raw;
+    if (typeof pako === "object" && typeof pako.deflate === "function") {
+      raw = pako.inflate(new Uint8Array(buffer));
+    } else if (typeof Zlib === "object" && typeof Zlib.Gunzip === "function") {
+      var inflate = new Zlib.Gunzip(new Uint8Array(buffer)); // eslint-disable-line no-undef
+      raw = inflate.decompress();
+    }
     buffer = raw.buffer;
     reader = new DataView(buffer);
     magic = reader.getUint32(0, true); //'TRAC'
@@ -537,21 +536,19 @@ async function readTRX(url, urlIsLocalFile = false) {
     if (!response.ok) throw Error(response.statusText);
     data = await response.arrayBuffer();
   }
-  const decompressed = fflate.unzipSync(data, {
-    filter(file) {
-      return file.originalSize > 0;
-    }
-  });
-  var keys = Object.keys(decompressed);
-  for (var i = 0, len = keys.length; i < len; i++) {
-    //console.log('>>>', decompressed[keys[i]]);
-    let parts = keys[i].split("/");
+  //https://stackoverflow.com/questions/54274686/how-to-wait-for-asynchronous-jszip-foreach-call-to-finish-before-running-next
+  let zip = await JSZip.loadAsync(data);
+  //zip uses / for windows and unix. https://stackoverflow.com/questions/13846000/file-separators-of-path-name-of-zipentry
+  for (let [filename, file] of Object.entries(zip.files)) {
+    if (file.dir) continue;
+    let parts = filename.split("/");
     let fname = parts.slice(-1)[0]; // my.trx/dpv/fx.float32 -> fx.float32
     if (fname.startsWith(".")) continue;
     let pname = parts.slice(-2)[0]; // my.trx/dpv/fx.float32 -> dpv
     let tag = fname.split(".")[0]; // "positions.3.float16 -> "positions"
     //todo: should tags be censored for invalide characters: https://stackoverflow.com/questions/8676011/which-characters-are-valid-invalid-in-a-json-key-name
-    let data = decompressed[keys[i]];
+    let data = await zip.file(filename).async("uint8array");
+    //next read header
     if (fname.includes("header.json")) {
       let jsonString = new TextDecoder().decode(data);
       header = JSON.parse(jsonString);
@@ -647,7 +644,7 @@ async function readTRX(url, urlIsLocalFile = false) {
     dpv,
     header,
   };
-}; // readTRX()
+};
 
 async function main() {
     let argv = process.argv.slice(2);
@@ -671,7 +668,7 @@ async function main() {
     let nrepeats = 11; //11 iterations, ignore first
     for (let i = 0; i < nrepeats; i++) {
         if (i == 1) d = Date.now(); //ignore first run for interpretting/disk
-        if (ext === "FIB" || ext === "VTK" || ext === "TCK" || ext === "TRK" || ext === "GZ" || ext === "ZSTD") {
+        if (ext === "FIB" || ext === "VTK" || ext === "TCK" || ext === "TRK" || ext === "GZ") {
             const buf = fs.readFileSync(fnm);
             //let array = new Uint8Array(buf).buffer;
             if (ext === "TCK")

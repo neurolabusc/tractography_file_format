@@ -1,9 +1,9 @@
 //Install dependencies
-// npm install jszip
+// npm install fflate
 //Test on tractogram
 // node trx.mjs dpv.trx
 
-import JSZip from "jszip";
+import * as fflate from "fflate";
 import * as fs from "fs";
 
 async function readTRX(url, urlIsLocalFile = false) {
@@ -41,19 +41,21 @@ async function readTRX(url, urlIsLocalFile = false) {
     if (!response.ok) throw Error(response.statusText);
     data = await response.arrayBuffer();
   }
-  //https://stackoverflow.com/questions/54274686/how-to-wait-for-asynchronous-jszip-foreach-call-to-finish-before-running-next
-  let zip = await JSZip.loadAsync(data);
-  //zip uses / for windows and unix. https://stackoverflow.com/questions/13846000/file-separators-of-path-name-of-zipentry
-  for (let [filename, file] of Object.entries(zip.files)) {
-    if (file.dir) continue;
-    let parts = filename.split("/");
+  const decompressed = fflate.unzipSync(data, {
+    filter(file) {
+      return file.originalSize > 0;
+    }
+  });
+  var keys = Object.keys(decompressed);
+  for (var i = 0, len = keys.length; i < len; i++) {
+    //console.log('>>>', decompressed[keys[i]]);
+    let parts = keys[i].split("/");
     let fname = parts.slice(-1)[0]; // my.trx/dpv/fx.float32 -> fx.float32
     if (fname.startsWith(".")) continue;
     let pname = parts.slice(-2)[0]; // my.trx/dpv/fx.float32 -> dpv
     let tag = fname.split(".")[0]; // "positions.3.float16 -> "positions"
     //todo: should tags be censored for invalide characters: https://stackoverflow.com/questions/8676011/which-characters-are-valid-invalid-in-a-json-key-name
-    let data = await zip.file(filename).async("uint8array");
-    //next read header
+    let data = decompressed[keys[i]];
     if (fname.includes("header.json")) {
       let jsonString = new TextDecoder().decode(data);
       header = JSON.parse(jsonString);
@@ -149,7 +151,7 @@ async function readTRX(url, urlIsLocalFile = false) {
     dpv,
     header,
   };
-};
+}; // readTRX()
 
 async function main() {
     let argv = process.argv.slice(2);
